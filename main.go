@@ -101,8 +101,8 @@ func digest4chanPage(url string) (img_list []string, title string) {
 }
 
 func main() {
-	//_ = downloadFile("something.webm", "http://i.4cdn.org/gif/1471697690851.webm")
-	img_list, title := digest4chanPage("http://boards.4chan.org/wg/thread/6672561")
+	thread_url := ""
+	img_list, title := digest4chanPage(thread_url)
 	fmt.Println(img_list)
 	re := regexp.MustCompile(`\d{10,30}\.\w*`)
 	for _, item := range img_list {
