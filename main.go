@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/html"
@@ -100,15 +101,52 @@ func digest4chanPage(url string) (img_list []string, title string) {
 	return img_list, title
 }
 
-func main() {
-	thread_url := ""
-	img_list, title := digest4chanPage(thread_url)
-	fmt.Println(img_list)
-	re := regexp.MustCompile(`\d{10,30}\.\w*`)
-	for _, item := range img_list {
-		download_dir := strings.Replace(title, " ", "_", -1)
-		filename := re.FindString(item)
-		fmt.Println(filename, download_dir)
-		//go
+func safeStringToFilepath(badString string) (filepath string) {
+	badChars := []string{
+		"'",
+		`"`,
+		`\`,
+		`/`,
+		"#",
+		"!",
+		"?",
+		"(",
+		")",
 	}
+
+	for _, badChar := range badChars {
+		badString = strings.Replace(badString, badChar, "", -1)
+	}
+	filepath = strings.Replace(badString, " ", "_", -1)
+	return
+}
+
+//func verboseWait
+
+func main() {
+	thread_url := os.Args[1]
+
+	img_list, title := digest4chanPage(thread_url)
+
+	re := regexp.MustCompile(`\d{10,30}\.\w*`)
+
+	download_dir := safeStringToFilepath(title)
+	os.MkdirAll(download_dir, os.FileMode(0777))
+
+	var wg sync.WaitGroup
+	wg.Add(len(img_list))
+
+	for _, item := range img_list {
+		fmt.Println("hello")
+		go func(item string) {
+			filename := re.FindString(item)
+			filepath := download_dir + "/" + filename
+			downloadFile(filepath, item)
+			wg.Done()
+		}(item)
+		//time.Sleep(100 * time.Millisecond)
+	}
+	wg.Wait()
+	fmt.Println(len(img_list))
+	//fmt.Println(os.Args[1])
 }
