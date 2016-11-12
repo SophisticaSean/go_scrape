@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
@@ -10,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/html"
+	"github.com/PuerkitoBio/goquery"
 )
 
 func downloadFile(filepath string, url string) (err error) {
@@ -47,58 +48,20 @@ func getPage(url string) (resp *http.Response) {
 	return
 }
 
-func digest4chanPage(url string) (img_list []string, title string) {
-	resp := getPage(url)
-	body := html.NewTokenizer(resp.Body)
-
-	// get the root post info
-	//title := ""
-	for {
-		element := body.Next()
-
-		switch {
-		case element == html.ErrorToken:
-			return
-		case element == html.StartTagToken:
-			element := body.Token()
-
-			isSpan := element.Data == "span"
-			if isSpan {
-				for _, a := range element.Attr {
-					if a.Key == "class" {
-						switch {
-						case a.Val == "subject":
-							// advance forward once into data
-							body.Next()
-							element = body.Token()
-
-							title = element.Data
-							//fmt.Println(element.Data)
-						}
-					}
-				}
-			}
-
-			isDiv := element.Data == "a"
-			if isDiv {
-				for _, a := range element.Attr {
-					if a.Key == "class" {
-						switch {
-						case a.Val == "fileThumb":
-							for _, b := range element.Attr {
-								if b.Key == "href" {
-									img_url := strings.Replace(b.Val, "//", "http://", 1)
-									img_list = append(img_list, img_url)
-									//fmt.Println(reflect.TypeOf(b.Val))
-								}
-							}
-						}
-					}
-				}
-			}
-		}
+func digest4chanPage(url string) (imgList []string, title string) {
+	doc, err := goquery.NewDocument(url)
+	if err != nil {
+		panic(err)
 	}
-	return img_list, title
+	doc.Find("div.opContainer blockquote").Each(func(i int, s *goquery.Selection) {
+		title = s.Text()
+	})
+	doc.Find("div.fileText a").Each(func(i int, s *goquery.Selection) {
+		imgURL, _ := s.Attr("href")
+		imgURL = strings.Replace(imgURL, "//", "http://", 100)
+		imgList = append(imgList, imgURL)
+	})
+	return imgList, title
 }
 
 func safeStringToFilepath(badString string) (filepath string) {
@@ -124,29 +87,43 @@ func safeStringToFilepath(badString string) (filepath string) {
 //func verboseWait
 
 func main() {
-	thread_url := os.Args[1]
+	threadURL := os.Args[1]
 
-	img_list, title := digest4chanPage(thread_url)
+	preImgList, title := digest4chanPage(threadURL)
+	imgList := []string{}
 
 	re := regexp.MustCompile(`\d{10,30}\.\w*`)
 
-	download_dir := safeStringToFilepath(title)
-	os.MkdirAll(download_dir, os.FileMode(0777))
+	downloadDir := safeStringToFilepath(title)
+	os.MkdirAll(downloadDir, os.FileMode(0777))
+	files, _ := ioutil.ReadDir(downloadDir)
+
+	// Skip files we've already downloaded
+	for _, item := range preImgList {
+		skip := false
+		for _, file := range files {
+			if strings.Contains(item, file.Name()) {
+				skip = true
+			}
+		}
+		if !skip {
+			imgList = append(imgList, item)
+		}
+	}
 
 	var wg sync.WaitGroup
-	wg.Add(len(img_list))
+	wg.Add(len(imgList))
 
-	for _, item := range img_list {
-		fmt.Println("hello")
+	for _, item := range imgList {
 		go func(item string) {
 			filename := re.FindString(item)
-			filepath := download_dir + "/" + filename
+			filepath := downloadDir + "/" + filename
 			downloadFile(filepath, item)
 			wg.Done()
 		}(item)
 		//time.Sleep(100 * time.Millisecond)
 	}
 	wg.Wait()
-	fmt.Println(len(img_list))
+	fmt.Println(len(imgList))
 	//fmt.Println(os.Args[1])
 }
