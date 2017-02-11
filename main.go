@@ -53,7 +53,8 @@ func digest4chanPage(url string) (imgList []string, title string) {
 	if err != nil {
 		panic(err)
 	}
-	doc.Find("div.opContainer blockquote").Each(func(i int, s *goquery.Selection) {
+	doc.Find("span.subject").Each(func(i int, s *goquery.Selection) {
+		fmt.Println(s.Text())
 		title = s.Text()
 	})
 	doc.Find("div.fileText a").Each(func(i int, s *goquery.Selection) {
